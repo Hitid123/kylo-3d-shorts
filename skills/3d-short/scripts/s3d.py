@@ -1206,4 +1206,5 @@ def when(beats, i, word=None, offset=0):
         for x in b["words"]:
             if x["w"].lower().strip(".,!?").startswith(w):
                 return int(round(x["s"] * fps)) + 1 + offset
+        print(f"s3d.when: WARNING word {word!r} not found in beat {i} ({b.get('text', '')[:50]!r}) - using the beat start")
     return b["fs"] + offset

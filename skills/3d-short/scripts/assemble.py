@@ -240,9 +240,15 @@ def main():
             mix.append(f"[s{j}]")
             k += 1
     if a.music:
-        inputs += ["-stream_loop", "-1", "-i", a.music]
-        fc.append(f"[{k}:a]aresample={SR},aformat=channel_layouts=stereo,volume={a.music_db}dB,atrim=duration={total:.3f},"
-                  f"afade=t=out:st={max(0, total - 1.5):.3f}:d=1.5[mus]")
+        inputs += ["-i", a.music]
+        mlen = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", a.music],
+                                    capture_output=True, text=True).stdout.strip() or total)
+        end = min(mlen, total)
+        if mlen < total - 0.5:
+            print(f"note: music ({mlen:.1f}s) is shorter than the video ({total:.1f}s); it fades out early. "
+                  f"Generate it with --seconds {int(total) + 4} for a full bed.")
+        fc.append(f"[{k}:a]aresample={SR},aformat=channel_layouts=stereo,volume={a.music_db}dB,atrim=duration={end:.3f},"
+                  f"afade=t=out:st={max(0, end - 1.5):.3f}:d=1.5,apad=whole_dur={total:.3f}[mus]")
         fc.append("[voice]asplit=2[voice1][vsc]")
         mix[0] = "[voice1]"
         if a.voice:

@@ -20,7 +20,22 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SCRIPTS = os.path.join(HERE, "..", "..", "scripts")
+
+
+def _find_scripts(here):
+    """The plugin's scripts folder, wherever this build.py was copied to (a project folder, the example itself)."""
+    import glob
+    for c in (os.environ.get("KYLO_SCRIPTS", ""), os.path.join(here, "..", "..", "scripts"), os.path.join(here, "scripts")):
+        if c and os.path.exists(os.path.join(c, "s3d.py")):
+            return os.path.abspath(c)
+    hits = sorted(glob.glob(os.path.expanduser("~/.claude/plugins/cache/*/kylo-3d-shorts/*/skills/3d-short/scripts")),
+                  key=lambda p: [int(x) if x.isdigit() else 0 for x in p.split(os.sep)[-4].split(".")])
+    if hits:
+        return hits[-1]
+    raise SystemExit("set KYLO_SCRIPTS=<plugin>/skills/3d-short/scripts")
+
+
+SCRIPTS = _find_scripts(HERE)
 sys.path.insert(0, SCRIPTS)
 import bpy  # noqa: E402
 from mathutils import Matrix, Vector  # noqa: E402
@@ -51,8 +66,8 @@ except TypeError:
     pass
 
 PARK = Vector((0, 3.6, s3d.TOP))
-XRAY = Vector((60, 3.6, 0))
-WARD = Vector((-60, 3.0, 0))
+XRAY = Vector((60, -30, 0))     # far from the backyard (its far lawn starts at y = 6.5)
+WARD = Vector((-60, -30, 0))
 
 # ================================================================= zone 1: the park (real view)
 s3d.backyard()

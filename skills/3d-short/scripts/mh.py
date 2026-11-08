@@ -363,13 +363,17 @@ class Person:
         return 2 * math.atan2(q.y, q.w)
 
     def fingers(self, side, curl=0.0, thumb=0.0, spread=0.0, only=None):
-        """Curl fingers (0 open .. 1 fist) around their local X; thumb curls separately."""
+        """Curl fingers (0 open .. 1 fist) around their local X; thumb curls separately; spread 0..1 fans them out."""
+        fan = {2: -1.0, 3: -0.3, 4: 0.4, 5: 1.0}
         for f in (2, 3, 4, 5):
             if only and f not in only:
                 continue
             for j in (1, 2, 3):
                 n = f"finger{f}-{j}.{side}"
-                self.pb[n].rotation_quaternion = Quaternion((1, 0, 0), math.radians(80 * curl * (0.8 if j == 1 else 1.0)))
+                q = Quaternion((1, 0, 0), math.radians(80 * curl * (0.8 if j == 1 else 1.0)))
+                if j == 1 and spread:
+                    q = Quaternion((0, 0, 1), math.radians(12 * spread * fan[f] * -_SIDE[side])) @ q
+                self.pb[n].rotation_quaternion = q
                 self._touched.add(n)
         for j in (1, 2, 3):
             n = f"finger1-{j}.{side}"
@@ -450,9 +454,11 @@ class Person:
         o = "L" if s == "R" else "R"
         sx = _SIDE[s]
         M = self.rig.matrix_world.to_3x3()
+        # head and chest first: the arm solver then aims at the nose/throat where they really are
+        self.look(**{k: kw.get(k, 0) for k in ("pitch", "yaw", "roll", "spine", "lean")})
+        cz = self.A["chest"].z
         if name in ("idle", "relax"):
             self.relax()
-            self.look(**{k: kw.get(k, 0) for k in ("pitch", "yaw", "roll", "spine", "lean")})
         elif name == "pinch_nose":
             nose = self.anchor("nose_tip")
             w = nose + M @ Vector((0.015 * sx, -0.08, -0.14))
@@ -476,6 +482,36 @@ class Person:
             w = E + M @ Vector((-0.26 * sx, -0.03, 0.05))
             self.arm(s, w, elbow=E, hand_dir=(-0.8 * sx, -0.1, 0.4))
             self.fingers(s, curl=0.6, thumb=0.4)
+        elif name == "fist_press":
+            # side = the fist; the other hand cups the knuckles and presses (cracking knuckles, nervous wait)
+            press = kw.get("press", 0.0)
+            ox = _SIDE[o]
+            R = self.rig.matrix_world
+            wf = Vector((0.05 * sx, -0.27 + 0.015 * press, cz - 0.143 - 0.012 * press))
+            hd = Vector((-0.25 * sx, -1.0, 0.05))
+            self.arm(s, R @ wf, elbow_hint=(0.7 * sx, 0.3, -1), hand_dir=hd, palm=(-0.6 * sx, 0, -0.8))
+            self.fingers(s, curl=1.0, thumb=0.7)
+            K = wf + hd.normalized() * 0.12
+            wc = K + Vector((0.085 * ox, -0.045 + 0.012 * press, -0.005))
+            self.arm(o, R @ wc, elbow_hint=(0.7 * ox, 0.3, -1), hand_dir=(sx, 0.35, 0.0), palm=(0, 1, 0))
+            self.fingers(o, curl=0.55 + 0.12 * press, thumb=0.35)
+        elif name == "interlace":
+            # fingers laced in front of the chest, palms out; ext 0 = at the chest, 1 = arms pushed forward
+            ext = kw.get("ext", 1.0)
+            R = self.rig.matrix_world
+            for q in "LR":
+                qx = _SIDE[q]
+                w = Vector((0.15 * qx, -0.25 - 0.19 * ext, cz - 0.063 + 0.08 * ext + (0.011 if q == "R" else 0.0)))
+                self.arm(q, R @ w, elbow_hint=(0.8 * qx, 0.2, -1), hand_dir=(-qx, -0.06, 0.0), palm=(0, -1, 0))
+                self.fingers(q, curl=0.12, thumb=0.15)
+        elif name == "hands_up":
+            # hand(s) raised beside the face, palm to the camera (show a hand, surrender, X-ray of a hand)
+            R = self.rig.matrix_world
+            for q in kw.get("sides", s):
+                qx = _SIDE[q]
+                self.arm(q, R @ Vector((0.20 * qx, -0.28, cz + 0.067)), elbow_hint=(0.5 * qx, 0.3, -1),
+                         hand_dir=(0.06 * qx, -0.15, 1), palm=(0, -1, 0))
+                self.fingers(q, curl=0.05, thumb=0.0)
         elif name == "point":
             S = self.rig.matrix_world @ self.pb[f"upperarm01.{s}"].matrix.to_translation()
             w = S + M @ Vector((0.25 * sx, -0.5, 0.05))
@@ -484,8 +520,22 @@ class Person:
             self.fingers(s, curl=0.0, only=(2,))
         else:
             raise ValueError(f"unknown pose {name}")
-        if name not in ("idle", "relax"):
-            self.look(**{k: kw.get(k, 0) for k in ("pitch", "yaw", "roll", "spine", "lean")})
+        if name in ("pinch_nose", "cover_mouth", "grab_throat", "elbow_sneeze", "point") and not kw.get("keep_other"):
+            self.arms_down(o)          # the free hand goes down (keep_other=True leaves it where it was)
+        self.key(frame, hold)
+
+    def begin(self, frame, dur=10):
+        """Start a custom pose: begin(f, dur) -> look()/arm()/fingers() -> key(f). Same easing as pose()."""
+        self._begin(frame, dur)
+
+    def act(self, frame, setup, dur=10, hold=0, **look):
+        """Custom pose in one call: `setup(person)` positions arms/fingers; head/chest (pitch, yaw, roll, spine,
+        lean) are set first so the arm solver sees the final chest. Example:
+            def wave(p): p.arm("R", p.rig.matrix_world @ Vector((-0.3, -0.2, 1.7)), hand_dir=(0, 0, 1), palm=(0, -1, 0))
+            guy.act(120, wave, dur=8, pitch=-5)"""
+        self._begin(frame, dur)
+        self.look(**{k: look.get(k, 0) for k in ("pitch", "yaw", "roll", "spine", "lean")})
+        setup(self)
         self.key(frame, hold)
 
     def arms_down(self, side):
@@ -555,6 +605,17 @@ class Person:
                             if part == "forearm" and seg_dist(x, chest_a, chest_b) < 0.075:
                                 probs.append((f, f"{s} forearm goes through the chest"))
                                 break
+                if s == "L":   # the two arms against each other (laced fingers may touch, forearms may not cross through)
+                    fl = (P("lowerarm01.L"), P("wrist.L"))
+                    fr = (P("lowerarm01.R"), P("wrist.R"))
+                    dmin = min(seg_dist(fl[0].lerp(fl[1], q), *fr) for q in (0.0, 0.25, 0.5, 0.75, 1.0))
+                    if dmin < 0.03:
+                        probs.append((f, f"forearms go through each other ({(0.03 - dmin) * 100:.0f} cm)"))
+                    hl = (P("wrist.L"), P("finger3-1.L"))
+                    hr = (P("wrist.R"), P("finger3-1.R"))
+                    dh = min(seg_dist(hl[0].lerp(hl[1], q), *hr) for q in (0.0, 0.5, 1.0))
+                    if dh < 0.008:
+                        probs.append((f, f"hands go through each other ({(0.008 - dh) * 1000:.0f} mm)"))
                 tw = abs(math.degrees(self._wrist_twist(s)))
                 if tw > 60:
                     probs.append((f, f"{s} wrist twisted {tw:.0f} deg against the forearm (skin wrings)"))

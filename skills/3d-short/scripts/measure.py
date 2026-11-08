@@ -26,7 +26,6 @@ def main():
     cuts = [float(x) for x in re.findall(r"pts_time:([\d.]+)", sc)]
     shots = np.diff([0] + cuts + [dur]) if True else []
     # palette + brightness from 1 frame per second
-    raw = run(["ffmpeg", "-v", "error", "-i", v, "-vf", "fps=1,scale=96:-1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"])
     w = 96
     probe = run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", v]).stdout.strip()
     W, H = map(int, probe.split(","))

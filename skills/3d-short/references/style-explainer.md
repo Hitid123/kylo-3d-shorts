@@ -11,7 +11,7 @@ What the ZackD-style explainers do on screen (two shorts sampled frame by frame,
 
 ## Acting
 - Faces carry these shorts: `face(frame, "pre_sneeze" | "squeeze" | "shock" | "pain" | "worried" | "relief" | "puff" | "sleep")`.
-- Hands touch the body where the story is: `pose(frame, "pinch_nose" | "cover_mouth" | "grab_throat" | "elbow_sneeze" | "point")` — solved on the real nose/throat of this body.
+- Hands touch the body where the story is: `pose(frame, "pinch_nose" | "cover_mouth" | "grab_throat" | "elbow_sneeze" | "point" | "fist_press" | "interlace" | "hands_up")` — solved on the real nose/throat/chest of this body; anything else with `act()`.
 - Small reactions between big poses: `jolt()` for a held sneeze, a cough, a hit.
 
 ## Captions

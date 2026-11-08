@@ -16,7 +16,7 @@ All paths below are relative to this skill folder: `${CLAUDE_SKILL_DIR}` (in a p
 ## Before you start (once per machine)
 
 1. Blender 4.2+ (tested on 5.2): `python3 ${CLAUDE_SKILL_DIR}/scripts/find_blender.py` prints the binary. If missing, tell the user to install it from blender.org (or Steam) and stop.
-2. `ffmpeg` on PATH, and `uv` (or a Python with `pillow numpy`).
+2. `ffmpeg` on PATH, and `uv` (or a Python with `pillow numpy`). If one is missing, offer to install it and do it on a yes (macOS: `brew install ffmpeg uv`; Windows: `winget install ffmpeg` and `winget install astral-sh.uv`; Linux: the package manager).
 3. ElevenLabs key — the plugin asks for it in its install dialog (`/plugin configure kylo-3d-shorts@kylo-3d-shorts` to change it; stored in the OS keychain and copied to `~/.config/kylo-3d-shorts/elevenlabs.key` at session start). Alternatives: `python3 ${CLAUDE_SKILL_DIR}/scripts/eleven.py setup` in the user's own terminal, or `ELEVENLABS_API_KEY` in the environment. `eleven.py check` tells whether a key is there and which permission is missing (the key needs Text to Speech, Sound Effects, Music Generation). Never ask the user to paste a key into chat. No key? The user can record the voice instead (step 2B). A monetized channel needs a paid ElevenLabs plan (free = non-commercial, no music).
 4. Internet on the first build: textures and props come from Poly Haven (CC0) and are cached in `~/.cache/kylo-3d-shorts`. Offline, every material falls back to a procedural one.
 5. Realistic people (only for the "what if" look): `python3 ${CLAUDE_SKILL_DIR}/scripts/setup_people.py --check`; if missing, ask the user (downloads ~310 MB, unpacks to ~370 MB) and run it without `--check`.
@@ -46,7 +46,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/beats.py script.txt words.json beats.json
 - **C. No voice yet** (preview the animation first): `python3 ${CLAUDE_SKILL_DIR}/scripts/voice.py plan script.txt .` estimates `words.json` from the text; build and preview with it, then do A or B and rebuild — everything re-times itself.
 
 ### 3. Build the scene
-Read the look for the format (`references/style.md` for builds, `references/style-explainer.md` for "what if"), `references/build.md` (s3d API) and `references/characters.md` (people). Copy the closest example into the project as `build.py` — `examples/bunker` (build + little person), `examples/pool` (build), `examples/whatif` (realistic person + X-ray) — and rewrite it for this script. For a build:
+Read the look for the format (`references/style.md` for builds, `references/style-explainer.md` for "what if"), `references/build.md` (s3d API) and `references/characters.md` (people). Copy the closest example into the project as `build.py` — `examples/bunker` (build + little person), `examples/pool` (build), `examples/whatif` (realistic person + X-ray) — and rewrite it for this script. The copy finds the plugin's scripts by itself (`_find_scripts`; set `KYLO_SCRIPTS=${CLAUDE_SKILL_DIR}/scripts` if it can't). For a build:
 - the world: `s3d.new_short()`, `s3d.backyard()`, `g = s3d.ground_section()` — photo-scanned soil strata, stones, roots, 3D lawn, HDRI sky;
 - one visible change per beat, landing on the word that names it: `s3d.when(B, i, "container")`;
 - the character acts every beat: `bob.dig(...)`, `bob.act(f, "scared")`, `bob.climb(...)`, `bob.lie(...)` — he shows the problem before the fix arrives;
@@ -70,15 +70,15 @@ Show the user 3–4 stills before the long render. Never move a character `.blen
 
 ### 5. Render
 ```bash
-"$BLENDER" --background --python build.py -- . half    # 540x960 draft to check motion (~0.4 s/frame on Apple Silicon)
-"$BLENDER" --background --python build.py -- . full    # 1080x1920 final (EEVEE, ~2-3 s/frame)
+"$BLENDER" --background --python build.py -- . half    # 540x960 draft to check motion (~1 s/frame on Apple Silicon: ~15-20 min)
+"$BLENDER" --background --python build.py -- . full    # 1080x1920 final (EEVEE, ~2-2.7 s/frame: 30-55 min for 30-40 s)
 ```
 Run long renders in the background and tell the user the ETA. Each render writes `render.sfx.json` (every sound cue with its frame). After the `half` render run `qa.py render.mp4 --every 0.5` and open the sheet: motion bugs (an arm sweeping through the body between two good poses, a frozen shot, a pop) only show up here.
 
 ### 6. Sound + assemble ✋
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/eleven.py sfx render.sfx.json sfx/                 # one sound per distinct cue, cached
-python3 ${CLAUDE_SKILL_DIR}/scripts/eleven.py music "<mood, instruments, tempo>" music.mp3 --seconds <length+2>
+python3 ${CLAUDE_SKILL_DIR}/scripts/eleven.py music "<mood, instruments, tempo>" music.mp3 --seconds <video length + 4>   # never shorter: the music is not looped
 uv run --with pillow --with numpy python ${CLAUDE_SKILL_DIR}/scripts/assemble.py \
   --video render.mp4 --voice voice.wav --words words.json --sfx render.sfx.json --sfx-lib sfx/ --music music.mp3 --out final.mp4 \
   [--style explainer]      # small sentence-case captions low in the frame for the "what if" look

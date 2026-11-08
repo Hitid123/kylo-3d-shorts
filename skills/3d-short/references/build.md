@@ -59,7 +59,8 @@ With the Blender MCP connected you can run the same code live through `execute_b
 - **Escape shaft**: second `dig()` beside the first, then `grow` a gravel box in it.
 
 ## Performance
-- EEVEE at 1080×1920: ~2–3 s/frame on Apple Silicon with the full world (grass, textures, raytracing); a 40 s short renders in ~45–60 min. Do drafts at `half` with 16 samples (~0.4 s/frame).
+- EEVEE at 1080×1920: ~2–2.7 s/frame on Apple Silicon (M5, measured) with the full world (grass, textures, raytracing); a 30–40 s short renders in ~30–55 min. Drafts at `half` with 16 samples run ~1 s/frame. Render time costs no Claude usage.
+- `s3d.when(B, i, "word")` prints a WARNING when the word is not in beat i (it then falls back to the beat start) — read the build log.
 - Textures are 2k and cached after the first build; the lawn is ~60k blades built with numpy in under a second.
 - Many `dig()` booleans or high-poly scans slow everything; keep imported models at 1k textures and < 200k faces.
 - Booleans use the EXACT solver; if a hole flickers, make the cutter slightly larger than the cut object.

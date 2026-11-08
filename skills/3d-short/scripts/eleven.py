@@ -27,6 +27,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.error
@@ -222,6 +223,18 @@ def cue_key(cue):
     return cue.get("prompt") or cue["sfx"]
 
 
+def _peak_normalize(src, peak_db=-1.0):
+    """ElevenLabs sounds come out anywhere from -12 to -50 LUFS. Bring every sound to the same peak so the
+    per-cue gains in assemble.py mean something. Writes <src>.wav next to it, returns its file name."""
+    out = os.path.splitext(src)[0] + ".wav"
+    det = subprocess.run(["ffmpeg", "-hide_banner", "-i", src, "-af", "volumedetect", "-f", "null", "-"],
+                         capture_output=True, text=True).stderr
+    m = re.search(r"max_volume: (-?[\d.]+) dB", det)
+    gain = (peak_db - float(m.group(1))) if m else 0.0
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", src, "-af", f"volume={gain:.2f}dB", "-ar", "48000", out], check=True)
+    return os.path.basename(out)
+
+
 def sfx_for_cues(cues_path, sfx_dir, force=False):
     """Generate one sound per distinct cue (kind or custom prompt). Writes sfx_dir/manifest.json {key: file}."""
     cues = json.load(open(cues_path))
@@ -238,7 +251,7 @@ def sfx_for_cues(cues_path, sfx_dir, force=False):
         name = c["sfx"] + "_" + hashlib.md5(k.encode()).hexdigest()[:8] + ".mp3"
         print(f"sfx  {k!r:60.60} -> {name}")
         sfx_one(prompt, os.path.join(sfx_dir, name), dur)
-        manifest[k] = name
+        manifest[k] = _peak_normalize(os.path.join(sfx_dir, name))
         with open(man_path, "w") as f:
             json.dump(manifest, f, indent=1, ensure_ascii=False)
     print(f"{len(manifest)} sounds in {sfx_dir}")
@@ -259,7 +272,17 @@ def music(prompt, out, seconds=60, model=MUSIC_MODEL):
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     with open(out, "wb") as f:
         f.write(raw)
-    print(out)
+    # generated tracks can end with seconds of silence: cut the silent tail so the length is honest
+    tmp = out + ".trim" + os.path.splitext(out)[1]
+    r = subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", out, "-af",
+                        "areverse,silenceremove=start_periods=1:start_threshold=-55dB:start_silence=0.2,areverse", tmp])
+    if r.returncode == 0 and os.path.getsize(tmp) > 1000:
+        os.replace(tmp, out)
+    got = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", out],
+                         capture_output=True, text=True).stdout.strip()
+    print(f"{out}  ({float(got or 0):.1f}s of music)")
+    if got and float(got) < seconds - 1.5:
+        print("music is shorter than asked: generate again with a few more --seconds (assemble.py will not loop it)")
     return out
 
 

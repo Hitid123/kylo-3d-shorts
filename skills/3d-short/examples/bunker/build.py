@@ -9,7 +9,20 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "..", "scripts"))
+def _find_scripts(here):
+    """The plugin's scripts folder, wherever this build.py was copied to (a project folder, the example itself)."""
+    import glob
+    for c in (os.environ.get("KYLO_SCRIPTS", ""), os.path.join(here, "..", "..", "scripts"), os.path.join(here, "scripts")):
+        if c and os.path.exists(os.path.join(c, "s3d.py")):
+            return os.path.abspath(c)
+    hits = sorted(glob.glob(os.path.expanduser("~/.claude/plugins/cache/*/kylo-3d-shorts/*/skills/3d-short/scripts")),
+                  key=lambda p: [int(x) if x.isdigit() else 0 for x in p.split(os.sep)[-4].split(".")])
+    if hits:
+        return hits[-1]
+    raise SystemExit("set KYLO_SCRIPTS=<plugin>/skills/3d-short/scripts")
+
+
+sys.path.insert(0, _find_scripts(HERE))
 import bpy  # noqa: E402
 import s3d  # noqa: E402
 import human  # noqa: E402

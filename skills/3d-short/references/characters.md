@@ -59,8 +59,13 @@ p.jolt(600)                                       # held sneeze / hit
 p.face(665, "shock", dur=3); p.pose(670, "grab_throat", dur=7)
 p.anchor("throat", frame)                         # world position of nose_tip / mouth / throat / eyes / chest
 ```
-- Call `pose`/`face` in time order; `dur` = frames of easing into the pose (0–1 for a hard cut).
+- Named poses: `idle`, `pinch_nose`, `cover_mouth`, `grab_throat`, `elbow_sneeze`, `point`, `fist_press` (side = the fist, `press=0..1`), `interlace` (fingers laced, `ext=0..1` pushes the arms out), `hands_up` (`sides="LR"`).
+- Your own pose: `p.act(frame, setup, dur=8, pitch=..)` where `setup(p)` calls `p.arm(...)`, `p.fingers(...)` — head/chest are set first, then the arms are solved, then keyed. Or by hand: `p.begin(f, dur)` → `look/arm/fingers` → `p.key(f)`. Arm targets in rig space: `p.rig.matrix_world @ Vector((x, y, z))`; use `p.A["chest"].z` / `p.anchor("throat")` so the pose fits any body.
+- `fingers(side, curl, thumb, spread, only=(2,))`: curl 0..1, spread 0..1 fans the fingers.
+- Call `pose`/`face`/`act` in time order; `dur` = frames of easing into the pose (0–1 for a hard cut).
 - `pitch` (+ chin down), `yaw`, `roll`, `spine` (+ bend forward), `lean` move head and chest with any pose.
 - Low level: `arm(side, wrist_world, elbow_hint, hand_dir, palm, elbow=None)` (two-bone IK on this body), `fingers(side, curl, thumb, only=(2,))`, `look(...)`, `move(frame, loc, rot)`.
 - Lying down: rotate the rig `(-90, 0, -90)` and put it on the mattress (see the ward in `examples/whatif`).
-- X-ray twin: load a second copy, give the body a glass material, remove its `Delete.*` mask modifiers (they hide skin under clothes), hide clothes/hair/eyes, keep the teeth as bone, parent organs to its bones (`examples/whatif`).
+- X-ray twin: load a second copy, give the body a glass material, remove its `Delete.*` mask modifiers (they hide skin under clothes), hide clothes/hair/eyes, keep the teeth as bone, parent organs to its bones (`examples/whatif`). Rest-pose coordinates are right only for bones the pose doesn't move (head, neck, spine); for anything on the arms/hands place the part at the POSED bone position (`rig.matrix_world @ pb[name].head` after `scene.frame_set(f)`) before parenting it to that bone.
+- Put every extra zone (X-ray void, rooms) far from the backyard, e.g. y = -30: the yard's far lawn starts at y = 6.5 and shows through a void that overlaps it.
+- `check()` covers arms vs head/face/neck/chest, forearm vs forearm, hand vs hand, wrist twist and folded elbows. It does not know your props: hands on objects you check by eye in the stills.
