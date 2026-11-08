@@ -1,0 +1,14 @@
+{
+  "name": "kylo-3d-shorts",
+  "owner": {
+    "name": "kyloai"
+  },
+  "description": "Viral vertical 3D Shorts in real Blender with Claude: cutaway builds and realistic 'what if' explainers",
+  "plugins": [
+    {
+      "name": "kylo-3d-shorts",
+      "source": "./",
+      "description": "Make viral vertical 3D Shorts in real Blender with Claude: 'How a hole becomes a bunker' cutaway builds or realistic 'What happens if you...' explainers with X-ray anatomy; ElevenLabs voice, sounds and music."
+    }
+  ]
+}

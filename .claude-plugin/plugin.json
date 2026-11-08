@@ -1,0 +1,30 @@
+{
+  "name": "kylo-3d-shorts",
+  "displayName": "Kylo 3D Shorts",
+  "version": "1.2.0",
+  "description": "Make viral vertical 3D Shorts in real Blender with Claude: 'How a hole becomes a bunker' cutaway builds with little people, or realistic 'What happens if you...' explainers with X-ray anatomy; ElevenLabs narration, sound effects and music, captions — script to upload-ready mp4.",
+  "author": {
+    "name": "kyloai",
+    "url": "https://t.me/kyloai"
+  },
+  "license": "MIT",
+  "keywords": [
+    "3d",
+    "animation",
+    "blender",
+    "characters",
+    "elevenlabs",
+    "faceless",
+    "shorts",
+    "video",
+    "youtube"
+  ],
+  "userConfig": {
+    "elevenlabs_api_key": {
+      "type": "string",
+      "title": "ElevenLabs API key",
+      "description": "Optional. For narration, sound effects and music (elevenlabs.io → Settings → API keys; enable Text to Speech, Sound Effects, Music Generation). Leave empty if you record the voice yourself.",
+      "sensitive": true
+    }
+  }
+}
