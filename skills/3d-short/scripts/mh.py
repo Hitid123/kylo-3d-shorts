@@ -256,7 +256,8 @@ class Person:
         """Give bone `name` this rig-space orientation (3x3), keeping its head where it is."""
         p = self.pb[name]
         self._upd()
-        M = rot3.to_4x4()
+        M = rot3.to_quaternion().to_matrix().to_4x4()   # pure rotation: float error must not creep into bone scale
+        p.scale = (1.0, 1.0, 1.0)
         M.translation = p.matrix.to_translation()
         p.matrix = M
         self._upd()
@@ -375,10 +376,13 @@ class Person:
                     q = Quaternion((0, 0, 1), math.radians(12 * spread * fan[f] * -_SIDE[side])) @ q
                 self.pb[n].rotation_quaternion = q
                 self._touched.add(n)
-        for j in (1, 2, 3):
+        # thumb: the base joint swings ACROSS the palm and flexes (0.7 = tucked under the index like in a real fist);
+        # before 1.3 it swung outwards and stuck out under every fist
+        t = thumb
+        for j, q in ((1, Quaternion((0, 0, 1), math.radians(-_SIDE[side] * 57 * t)) @ Quaternion((1, 0, 0), math.radians(100 * t))),
+                     (2, Quaternion((1, 0, 0), math.radians(36 * t))), (3, Quaternion((1, 0, 0), math.radians(43 * t)))):
             n = f"finger1-{j}.{side}"
-            self.pb[n].rotation_quaternion = Quaternion((0, 0, 1), math.radians(-35 * thumb * _SIDE[side] * -1)) @ \
-                Quaternion((1, 0, 0), math.radians(25 * thumb))
+            self.pb[n].rotation_quaternion = q
             self._touched.add(n)
         self._upd()
 
@@ -483,27 +487,14 @@ class Person:
             self.arm(s, w, elbow=E, hand_dir=(-0.8 * sx, -0.1, 0.4))
             self.fingers(s, curl=0.6, thumb=0.4)
         elif name == "fist_press":
-            # side = the fist; the other hand cups the knuckles and presses (cracking knuckles, nervous wait)
-            press = kw.get("press", 0.0)
-            ox = _SIDE[o]
-            R = self.rig.matrix_world
-            wf = Vector((0.05 * sx, -0.27 + 0.015 * press, cz - 0.143 - 0.012 * press))
-            hd = Vector((-0.25 * sx, -1.0, 0.05))
-            self.arm(s, R @ wf, elbow_hint=(0.7 * sx, 0.3, -1), hand_dir=hd, palm=(-0.6 * sx, 0, -0.8))
-            self.fingers(s, curl=1.0, thumb=0.7)
-            K = wf + hd.normalized() * 0.12
-            wc = K + Vector((0.085 * ox, -0.045 + 0.012 * press, -0.005))
-            self.arm(o, R @ wc, elbow_hint=(0.7 * ox, 0.3, -1), hand_dir=(sx, 0.35, 0.0), palm=(0, 1, 0))
-            self.fingers(o, curl=0.55 + 0.12 * press, thumb=0.35)
+            # side = the fist (palm down); the other hand comes down on top and presses: cracking one hand.
+            # For a whole crack (squeeze -> pop -> relax) with hands that stay together use acting.Timeline.
+            import acting
+            acting.apply(self, acting.fist_top(self, s, press=kw.get("press", 0.0), pop=kw.get("pop", 0.0)))
         elif name == "interlace":
-            # fingers laced in front of the chest, palms out; ext 0 = at the chest, 1 = arms pushed forward
-            ext = kw.get("ext", 1.0)
-            R = self.rig.matrix_world
-            for q in "LR":
-                qx = _SIDE[q]
-                w = Vector((0.15 * qx, -0.25 - 0.19 * ext, cz - 0.063 + 0.08 * ext + (0.011 if q == "R" else 0.0)))
-                self.arm(q, R @ w, elbow_hint=(0.8 * qx, 0.2, -1), hand_dir=(-qx, -0.06, 0.0), palm=(0, -1, 0))
-                self.fingers(q, curl=0.12, thumb=0.15)
+            # fingers laced, palms out; ext 0 = at the chest, 1 = arms pushed forward (crack them all)
+            import acting
+            acting.apply(self, acting.lace(self, kw.get("ext", 1.0)))
         elif name == "hands_up":
             # hand(s) raised beside the face, palm to the camera (show a hand, surrender, X-ray of a hand)
             R = self.rig.matrix_world

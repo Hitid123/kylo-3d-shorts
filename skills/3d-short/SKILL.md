@@ -54,7 +54,7 @@ Read the look for the format (`references/style.md` for builds, `references/styl
 - camera: wide → push in on each new part → pull back for the payoff; one straight dolly axis, eased, never orbit;
 - props: procedural (`s3d.box/cylinder/hollow_box/ladder/rock`), photo materials `s3d.tex("corrugated_iron_02", tint=...)`, real CC0 models `assets.model("wooden_crate_01", size=0.75, loc=...)`.
 
-For a "what if": one zone per kind of view (real place, X-ray void, a ward/room…) placed far apart in the same scene; one camera per shot bound to timeline markers (hard cuts) with a slow push-in; the person's face and hands act every shot (`face()`, `pose()`); inside views show the mechanism with glowing particles, swelling, colour changes landing on the words.
+For a "what if": one zone per kind of view (real place, X-ray void, a ward/room…) placed far apart in the same scene; one camera per shot bound to timeline markers (hard cuts) with a slow push-in; the person's face and hands act every shot; any gesture where the hands move or touch each other (cracking knuckles, rubbing hands, grabbing a fist) goes through `acting.Timeline` (target keys, IK on every frame, breathing/blinks — see `references/characters.md` → Smooth acting), simple holds can use `pose()`/`face()`; inside views show the mechanism with glowing particles, swelling, colour changes landing on the words.
 
 ### 4. Look at it ✋ (QA is mandatory)
 ```bash
@@ -66,6 +66,10 @@ Three layers of checks, all must be clean:
 1. **Scene** (`s3d.qa_gate`, printed as `QA:` lines, and it blocks `render_mp4`): missing textures (they render MAGENTA), empty image nodes, no camera, visible boolean cutters.
 2. **Poses** (`Person.check()` for every realistic person, passed to `render_mp4(qa=...)`): an arm or hand through the head/face/neck/chest, a wrist twisted against the forearm, a folded elbow — with frame numbers. Fix the pose (different target, `elbow=`, `dur`, camera angle) and rebuild.
 3. **Pixels** (`qa.py` + your eyes): open `qa_sheet.jpg` and every still; check hands touch what they should (no fingers inside faces), faces read at phone size, nothing floats or intersects, the look list in `style.md` / `style-explainer.md`.
+4. **Motion** (stills hide it): render the acting shots as a fast low-res strip and look at every 2nd frame around each gesture — nothing may jump more than a few cm between frames unless it is the pop itself, contacts must hold, no 4-frame transitions between big poses. `acting.Timeline.bake()` prints `acting: fast hand move…` for the suspicious frames.
+   ```bash
+   ffmpeg -i render_half.mp4 -vf "select='between(n\,30\,77)*not(mod(n\,2))',scale=216:-2,tile=8x3" -frames:v 1 -fps_mode vfr strip.jpg
+   ```
 Show the user 3–4 stills before the long render. Never move a character `.blend` with external textures — `mh.py make` packs them.
 
 ### 5. Render

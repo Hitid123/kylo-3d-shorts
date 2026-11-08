@@ -59,7 +59,7 @@ p.jolt(600)                                       # held sneeze / hit
 p.face(665, "shock", dur=3); p.pose(670, "grab_throat", dur=7)
 p.anchor("throat", frame)                         # world position of nose_tip / mouth / throat / eyes / chest
 ```
-- Named poses: `idle`, `pinch_nose`, `cover_mouth`, `grab_throat`, `elbow_sneeze`, `point`, `fist_press` (side = the fist, `press=0..1`), `interlace` (fingers laced, `ext=0..1` pushes the arms out), `hands_up` (`sides="LR"`).
+- Named poses: `idle`, `pinch_nose`, `cover_mouth`, `grab_throat`, `elbow_sneeze`, `point`, `fist_press` (side = the fist, `press=0..1`), `interlace` (fingers laced, `ext=0..1` pushes the arms out), `hands_up` (`sides="LR"`). `fist_press`/`interlace` are single poses; for the actual crack (wind-up → push → pop → relax) use `acting` below.
 - Your own pose: `p.act(frame, setup, dur=8, pitch=..)` where `setup(p)` calls `p.arm(...)`, `p.fingers(...)` — head/chest are set first, then the arms are solved, then keyed. Or by hand: `p.begin(f, dur)` → `look/arm/fingers` → `p.key(f)`. Arm targets in rig space: `p.rig.matrix_world @ Vector((x, y, z))`; use `p.A["chest"].z` / `p.anchor("throat")` so the pose fits any body.
 - `fingers(side, curl, thumb, spread, only=(2,))`: curl 0..1, spread 0..1 fans the fingers.
 - Call `pose`/`face`/`act` in time order; `dur` = frames of easing into the pose (0–1 for a hard cut).
@@ -69,3 +69,30 @@ p.anchor("throat", frame)                         # world position of nose_tip /
 - X-ray twin: load a second copy, give the body a glass material, remove its `Delete.*` mask modifiers (they hide skin under clothes), hide clothes/hair/eyes, keep the teeth as bone, parent organs to its bones (`examples/whatif`). Rest-pose coordinates are right only for bones the pose doesn't move (head, neck, spine); for anything on the arms/hands place the part at the POSED bone position (`rig.matrix_world @ pb[name].head` after `scene.frame_set(f)`) before parenting it to that bone.
 - Put every extra zone (X-ray void, rooms) far from the backyard, e.g. y = -30: the yard's far lawn starts at y = 6.5 and shows through a void that overlaps it.
 - `check()` covers arms vs head/face/neck/chest, forearm vs forearm, hand vs hand, wrist twist and folded elbows. It does not know your props: hands on objects you check by eye in the stills.
+
+## Smooth acting (scripts/acting.py) — use it for every hand gesture
+
+`pose()` keys solved bone rotations and Blender interpolates them: hands that hold each other drift apart between keys, and a 4–8 frame change between two poses reads as a twitch ("too sharp, hands look crooked" — real feedback on a test video). `acting.Timeline` keys the TARGETS instead (wrist position, hand direction, palm, finger curl, head/chest, face), interpolates them with a monotone cubic (ease in/out, no overshoot) and solves the IK on every frame. On top it adds breathing, a slow sway and blinks, so holds never look frozen.
+
+```python
+import acting as A
+tl = A.Timeline(guy, seed=3)                       # one per person; call key() in time order
+pop = W(0, "knuckles") + 1                          # the crack sound goes on this frame
+tl.key(1,       A.lace(guy, 0.0, grip=0.2), look=dict(pitch=12), face=dict(brows=0.25))
+tl.key(pop - 15, A.lace(guy, -0.1), look=dict(pitch=9, spine=-3))          # wind-up: pull in, breathe in
+tl.key(pop - 2,  A.lace(guy, 0.94), look=dict(pitch=4, spine=3), face=dict(lids=-0.55, brows=-0.55, lips=-0.8))
+tl.key(pop + 1,  A.lace(guy, 1.08), look=dict(pitch=1, spine=4))          # the extra shove = the pop
+tl.key(pop + 14, A.lace(guy, 0.9), face=dict(jaw=3, lids=-0.3, brows=0.35, lips=0.25))   # relief
+tl.key(72, A.lace(guy, 0.82)); tl.cut(72)          # last frame of the shot
+g = A.fist_top(guy, "R", press=1.0)                 # fist R + the other hand on top; mix hands freely:
+g["L"] = A.idle_hand(guy, "L")
+tl.shake(120, 144)                                  # effort tremble while squeezing
+tl.bake()                                           # writes the keys; prints fast moves to check
+s3d.marker("crack", pop, prompt="...")
+```
+- Gestures: `idle`, `lace(ext, grip)`, `unlace` (between lace and idle), `fist_top(F, close, cover, press, pop)`, `palm_up(side)`, `palm_side(side)` (middle key when turning a palm over), your own with `A.hand(wrist, elbow_hint, hand_dir, palm, curl, thumb, spread, mcp)` in rig space (heights from `p.A["chest"].z`).
+- Timing that reads as human at 30 fps: a move 8–15 frames, a wind-up 6–10 before a push, the pop 2–3, then hold 10+ with a relief face. A single person does one gesture per beat, landing on the word.
+- `tl.cut(f)` on the last frame of every shot (the pose holds, then jumps at the next key — nothing smears across a hard cut; build.py also sets `render.motion_blur_position = "START"`).
+- Don't mix `pose()`/`face()`/`act()` with a Timeline on the same person: the Timeline owns all of that person's arm, finger, head and face keys.
+- Camera for hand gestures: 3/4 from the side of the moving hand (a push straight at the lens is invisible), close enough that the hands are a third of the frame; for a squeezed fist shoot from the fist's side, slightly below.
+- Pitfalls fixed in 1.3 and worth knowing: quaternion keys must keep a continuous sign (q and -q interpolate through zero and the hand smears into spikes under motion blur); a solver that starts from the last pose must not let float error creep into bone scale; the thumb's base joint swings across the palm (old thumb stuck out under every fist).

@@ -16,6 +16,7 @@ You give Claude an idea. It writes the script with the proven formula, voices it
 - **ElevenLabs**: narration with exact word timings, one generated sound per on-screen action, instrumental music (`scripts/eleven.py`).
 - **Poly Haven importer**: real CC0 models, textures and HDRIs, cached locally.
 - **Assembly**: 1–3-word captions on the spoken words, sounds on their frames, music ducked under the voice, −14 LUFS.
+- **People that move like people** (v1.3): hand gestures are keyed as targets and solved on every frame with ease-in/out, wind-ups and settles; hands that hold each other stay together; breathing, sway and blinks keep holds alive; fast jerky moves are reported before the render.
 - **QA before you waste a render**: missing textures, arms through heads, twisted wrists and black/magenta frames are caught automatically (`s3d.qa_gate`, `Person.check`, `qa.py`) with frame numbers and a contact sheet.
 - **Reference measurer**: shot lengths, cut rate, palette, loudness, words/s of any short — yours vs. the reference.
 - Three complete examples: `skills/3d-short/examples/bunker` (build + little person), `examples/pool` (build) and `examples/whatif` ("What happens if you hold in a sneeze?" — realistic person, X-ray, hospital).
