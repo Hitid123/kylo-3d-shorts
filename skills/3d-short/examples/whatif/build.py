@@ -497,14 +497,19 @@ s3d.marker("pop", f_pop, prompt="sharp wet pop inside a neck, close up, body hor
 f8 = W(8)
 guy.pose(f8 + 1, "idle", dur=1, pitch=-6)
 guy.face(f8 + 1, "worried", dur=1)
-guy.pose(W(8, "comes") + 4, "idle", pitch=-14, spine=-4, dur=12)
-guy.face(W(8, "comes") + 4, "pre_sneeze", dur=10, jaw=12, lids=-0.75)
-f_out = W(8, "out")
-guy.pose(f_out - 8, "elbow_sneeze", side="R", dur=8, pitch=14, spine=10)
-guy.face(f_out - 8, "sneeze", dur=6)
-guy.jolt(f_out - 2, amount=0.7)
-guy.pose(f_out + 22, "idle", dur=12, pitch=-2)
+cm, f_out = W(8, "comes"), W(8, "out")
+# the arm folds up first (elbow_up), then the crook goes in front of the nose: no swing across the chest, no fist on the cheek.
+# The sneeze itself is the head going down into the elbow (pitch), not the arm moving (a bigger pitch puts the face into the forearm).
+guy.face(cm + 4, "pre_sneeze", dur=10, jaw=12, lids=-0.75)
+guy.pose(cm + 14, "elbow_up", side="R", dur=24, pitch=-14, spine=-4)
+guy.pose(f_out - 6, "elbow_sneeze", side="R", dur=10, pitch=-10, spine=-3)
+guy.pose(f_out - 1, "elbow_sneeze", side="R", dur=5, pitch=9, spine=8)
+guy.face(f_out - 1, "sneeze", dur=4)
+guy.pose(f_out + 12, "elbow_sneeze", side="R", dur=13, pitch=3, spine=2)
+guy.face(f_out + 12, "squeeze", dur=8)
+guy.pose(f_out + 22, "elbow_up", side="R", dur=10, pitch=0)
 guy.face(f_out + 22, "relief", dur=10)
+guy.pose(f_out + 44, "idle", dur=22, pitch=-2)
 s3d.marker("whoosh", f_out - 3, prompt="loud natural man sneeze into his elbow, ah-choo", gain=0, seconds=1.5)
 
 # X-ray twin: pinching the whole time, tenses at the spike, grabs the throat after the pop

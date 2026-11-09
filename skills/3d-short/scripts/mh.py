@@ -463,29 +463,11 @@ class Person:
         cz = self.A["chest"].z
         if name in ("idle", "relax"):
             self.relax()
-        elif name == "pinch_nose":
-            nose = self.anchor("nose_tip")
-            w = nose + M @ Vector((0.015 * sx, -0.08, -0.14))
-            self.arm(s, w, elbow_hint=(0.5 * sx, -0.3, -1), hand_dir=(-0.2 * sx, 0.45, 1), palm=(-sx, 0.7, 0))
-            self.fingers(s, curl=0.9, thumb=0.8)
-            self.fingers(s, curl=0.55, only=(2,))
-        elif name == "cover_mouth":
-            m = self.anchor("mouth")
-            w = m + M @ Vector((0.03 * sx, -0.06, -0.08))
-            self.arm(s, w, elbow_hint=(0.5 * sx, -0.3, -1), hand_dir=(-0.5 * sx, 0.2, 1), palm=(0, 1, 0))
-            self.fingers(s, curl=0.1, thumb=0.2)
-        elif name == "grab_throat":
-            t = self.anchor("throat")
-            w = t + M @ Vector((0.07 * sx, -0.05, -0.05))
-            self.arm(s, w, elbow_hint=(0.5 * sx, -0.2, -1), hand_dir=(-0.9 * sx, 0.1, 0.4), palm=(0, 1, 0.1))
-            self.fingers(s, curl=0.2, thumb=0.25)
-        elif name == "elbow_sneeze":
-            # the crook of the elbow goes in front of the nose, the forearm crosses IN FRONT of the face
-            nose = self.anchor("nose_tip")
-            E = nose + M @ Vector((0.03 * sx, -0.11, -0.07))
-            w = E + M @ Vector((-0.26 * sx, -0.03, 0.05))
-            self.arm(s, w, elbow=E, hand_dir=(-0.8 * sx, -0.1, 0.4))
-            self.fingers(s, curl=0.6, thumb=0.4)
+        elif name in ("pinch_nose", "near_nose", "cover_mouth", "grab_throat", "elbow_sneeze", "elbow_up"):
+            # the same checked gestures as acting.py (thumb + hooked index on the nose, elbow crook placed with the
+            # real arm lengths...); hands on the face follow the head that look() just turned
+            import acting
+            acting.apply(self, {s: getattr(acting, name)(self, s)})
         elif name == "fist_press":
             # side = the fist (palm down); the other hand comes down on top and presses: cracking one hand.
             # For a whole crack (squeeze -> pop -> relax) with hands that stay together use acting.Timeline.
@@ -511,7 +493,7 @@ class Person:
             self.fingers(s, curl=0.0, only=(2,))
         else:
             raise ValueError(f"unknown pose {name}")
-        if name in ("pinch_nose", "cover_mouth", "grab_throat", "elbow_sneeze", "point") and not kw.get("keep_other"):
+        if name in ("pinch_nose", "near_nose", "cover_mouth", "grab_throat", "elbow_sneeze", "elbow_up", "point") and not kw.get("keep_other"):
             self.arms_down(o)          # the free hand goes down (keep_other=True leaves it where it was)
         self.key(frame, hold)
 

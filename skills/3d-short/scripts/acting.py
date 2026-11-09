@@ -22,7 +22,13 @@ Ready-made gestures (each returns {"L": hand, "R": hand}; mix them: g = A.idle(p
     unlace(p)                       hands just let go, palms down in front of the belly (use between lace and idle)
     fist_top(p, F, close, cover, press, pop)   fist F, the other hand on top pressing (crack one hand)
     palm_up(p, side) / palm_side(p, side)      look at your hand / the middle key of turning a fist palm-up
-Your own: A.hand(wrist, elbow_hint, hand_dir, palm, curl, thumb, spread, mcp) in rig space.
+    pinch_nose(p, side) / near_nose(p, side)    thumb + hooked index on the nose (near = about to pinch, rubbing)
+    cover_mouth(p, side)                        flat hand over the mouth (never together with pinch_nose: the hands collide)
+    elbow_up(p, side) -> elbow_sneeze(p, side)  arm folds up, then the crook of the elbow in front of the nose
+    grab_throat(p, side)                        hand wrapped round the front of the neck
+Your own: A.hand(wrist, elbow_hint, hand_dir, palm, curl, thumb, spread, mcp, rel=False, fc=None) in rig space.
+rel=True pins the hand to the HEAD (given in the rest pose; it moves and turns with the head, so a hand pinching the
+nose stays on the nose through a sneeze jolt). fc = curl of index/middle/ring/pinky if they differ.
 
 Rules that keep it human:
   * a move takes 8-15 frames, a wind-up before a push 6-10, a snap (the pop itself) 2-3; hold 10+ frames after
@@ -39,7 +45,7 @@ from mathutils import Matrix, Quaternion, Vector
 SIDE = {"L": 1.0, "R": -1.0}
 LOOK_KEYS = ("pitch", "yaw", "roll", "spine", "lean")
 FACE_KEYS = ("jaw", "lids", "brows", "lips")
-HAND_SCALARS = ("curl", "thumb", "spread", "mcp")
+HAND_SCALARS = ("thumb", "spread", "mcp", "relw")
 
 
 # ------------------------------------------------------------------ hand frames
@@ -57,8 +63,14 @@ def q_dirs(q):
     return m.col[1].copy(), m.col[0].copy()
 
 
-def hand(w, hint, hand_dir, palm, curl=0.2, thumb=0.15, spread=0.1, mcp=0.0):
-    return dict(w=Vector(w), hint=Vector(hint), q=frame_q(hand_dir, palm), curl=curl, thumb=thumb, spread=spread, mcp=mcp)
+def finger_curls(curl, cascade=0.07):
+    """Natural per-finger curl from one value: index a bit straighter than the pinky."""
+    return [max(-0.2, min(1.3, curl + cascade * (fi - 3) * (1.0 - min(1.0, max(0.0, curl))))) for fi in (2, 3, 4, 5)]
+
+
+def hand(w, hint, hand_dir, palm, curl=0.2, thumb=0.15, spread=0.1, mcp=0.0, rel=False, fc=None):
+    return dict(w=Vector(w), hint=Vector(hint), q=frame_q(hand_dir, palm), fc=list(fc) if fc else finger_curls(curl),
+                thumb=thumb, spread=spread, mcp=mcp, relw=1.0 if rel else 0.0)
 
 
 def shoulder(p, s):
@@ -146,6 +158,75 @@ def palm_side(p, s, at=None, curl=0.6):
     return hand(at, (0.6 * sx, 0.4, -1.0), (0.3 * -sx, -1.0, 0.1), (-sx, 0.0, 0.0), curl=curl, thumb=0.3, spread=0.05)
 
 
+def _nose_hand(p, s, dy, dz, fc, thumb):
+    """Thumb on the near side of the nose, index hooked round the far nostril, other fingers loosely curled in front
+    of the mouth (palm towards the face). Pinned to the head, so it stays on the nose through a sneeze jolt."""
+    sx = SIDE[s]
+    w = p.A["nose_tip"] + Vector((-0.02 * sx, dy, dz))
+    return hand(w, (0.5 * sx, -0.2, -1.0), (-0.18 * sx, 0.30, 1.0), (-0.3 * sx, 1.0, 0.0), thumb=thumb, spread=0.0, fc=fc, rel=True)
+
+
+def pinch_nose(p, s="R"):
+    """Pinch the nose shut (checked in close-up: no finger reaches the eyes)."""
+    return _nose_hand(p, s, -0.062, -0.112, [0.72, 0.9, 1.0, 1.05], 0.3)
+
+
+def near_nose(p, s="R"):
+    """Hand at the nose, not pinching yet: a nose that itches, rubbing it, the moment before the pinch."""
+    return _nose_hand(p, s, -0.087, -0.122, [0.55, 0.8, 0.95, 1.0], 0.2)
+
+
+def cover_mouth(p, s="L"):
+    """Flat hand over the mouth."""
+    sx = SIDE[s]
+    w = p.A["mouth"] + Vector((0.03 * sx, -0.065, -0.085))
+    return hand(w, (0.5 * sx, -0.3, -1.0), (-0.5 * sx, 0.2, 1.0), (0.0, 1.0, 0.0), curl=0.12, thumb=0.2, spread=0.05, rel=True)
+
+
+def grab_throat(p, s="R"):
+    """Hand wrapped round the front of the neck, fingers towards the far side (the throat does not turn with the head)."""
+    sx = SIDE[s]
+    w = p.A["throat"] + Vector((0.06 * sx, -0.045, -0.03))
+    return hand(w, (0.5 * sx, -0.2, -1.0), (-0.8 * sx, 0.5, 0.3), (0.2 * sx, 1.0, 0.1), curl=0.55, thumb=0.1, spread=0.05)
+
+
+def arm_lengths(p, s):
+    B = p.rig.data.bones
+    S, E, W = (B[f"{n}.{s}"].head_local for n in ("upperarm01", "lowerarm01", "wrist"))
+    return (E - S).length, (W - E).length
+
+
+def _elbow_at(p, s, T, fdir, hd, palm, curl, thumb):
+    """Wrist target and elbow hint that put the elbow joint as close to T as the upper arm reaches (exact lengths,
+    so the IK lands the elbow there), forearm along fdir."""
+    S = shoulder(p, s)
+    a, b = arm_lengths(p, s)
+    E = S + (Vector(T) - S).normalized() * a
+    W = E + Vector(fdir).normalized() * b
+    return hand(W, E - (S + W) / 2, hd, palm, curl=curl, thumb=thumb, spread=0.05)
+
+
+def elbow_sneeze(p, s="R"):
+    """Sneeze into the elbow: crook of the elbow in front of the nose and mouth, forearm across the face to the other
+    side, hand hanging loose. Not pinned to the head - pitch the head forward (pitch ~13, spine ~9) to bury the face without going through the arm."""
+    sx = SIDE[s]
+    T = p.A["nose_tip"] + Vector((0.0, -0.08, -0.04))
+    return _elbow_at(p, s, T, (-0.95 * sx, 0.75, 0.05), (-0.75 * sx, 0.45, -0.45), (0.0, 1.0, -0.4), 0.25, 0.2)
+
+
+def elbow_up(p, s="R"):
+    """The arm folding up on the way to elbow_sneeze (and back down): elbow in front of the chest, hand at the
+    other shoulder. Key it between idle and elbow_sneeze so the forearm never sweeps across the face."""
+    sx = SIDE[s]
+    T = p.A["nose_tip"] + Vector((0.07 * sx, -0.20, -0.30))
+    return _elbow_at(p, s, T, (-0.75 * sx, 0.25, 0.6), (-0.75 * sx, 0.25, 0.6), (0.0, 1.0, -0.3), 0.4, 0.3)
+
+
+def wipe_nose(p, s="R"):
+    """Kept for old plans: now the same safe shape as near_nose."""
+    return near_nose(p, s)
+
+
 # ------------------------------------------------------------------ interpolation
 def _flatten(state):
     flat = {}
@@ -158,6 +239,8 @@ def _flatten(state):
             flat[f"{s}.q{i}"] = h["q"][i]
         for k in HAND_SCALARS:
             flat[f"{s}.{k}"] = h[k]
+        for i in range(4):
+            flat[f"{s}.fc{i}"] = h["fc"][i]
     for k in LOOK_KEYS:
         flat["look." + k] = state["look"].get(k, 0.0)
     for k in FACE_KEYS:
@@ -352,16 +435,30 @@ class Timeline:
             p.pb[n].location = (0.0, 0.0, 0.0)
         lf = self._life(f)
         look = {k: v["look." + k] + lf[k] for k in LOOK_KEYS}
+        for f0, f1, a in self.tremble:                    # effort tremble also shakes the head (and hands pinned to it)
+            if f0 <= f <= f1:
+                env = max(0.0, min(1.0, (f - f0) / 6.0, (f1 - f) / 4.0))
+                look["pitch"] += math.sin(f * 2.1) * 0.9 * a * env
+                look["roll"] += math.sin(f * 2.7 + 1.3) * 0.7 * a * env
+                look["spine"] += math.sin(f * 1.6 + 0.4) * 0.4 * a * env
         p.look(**look)
         tr = self._trem(f)
         drift = Vector((math.sin(f / 23.0 + self.ph[7]), math.sin(f / 31.0), math.sin(f / 19.0 + 1))) * 0.0015 * self.life
+        Mh = p.pb["head"].matrix @ p._rest["head"].inverted()      # head motion since the rest pose (rig space)
+        Rh = Mh.to_quaternion()
         for s in "LR":
-            w = Vector([v[f"{s}.w{i}"] for i in range(3)]) + tr + drift
+            rw = max(0.0, min(1.0, v[f"{s}.relw"]))
+            w = Vector([v[f"{s}.w{i}"] for i in range(3)])
             hint = Vector([v[f"{s}.h{i}"] for i in range(3)])
             q = Quaternion([v[f"{s}.q{i}"] for i in range(4)]).normalized()
+            if rw > 0:                                              # pinned to the head
+                w = w.lerp(Mh @ w, rw)
+                hint = hint.lerp(Rh @ hint, rw)
+                q = q.slerp(Rh @ q, rw)
+            w = w + tr * (1 - rw) + drift * (1 - rw)
             hd, palm = q_dirs(q)
             p.arm(s, p.rig.matrix_world @ w, elbow_hint=hint, hand_dir=hd, palm=palm)
-            shape(p, s, v[f"{s}.curl"], v[f"{s}.thumb"], v[f"{s}.spread"], v[f"{s}.mcp"])
+            shape(p, s, None, v[f"{s}.thumb"], v[f"{s}.spread"], v[f"{s}.mcp"], fc=[v[f"{s}.fc{i}"] for i in range(4)])
         self._wrists[f] = {s: p.pb[f"wrist.{s}"].head.copy() for s in "LR"}
         face = {k: v["face." + k] for k in FACE_KEYS}
         b = self._blink(f)
@@ -372,12 +469,13 @@ class Timeline:
         return {n: p.pb[n].rotation_quaternion.copy() for n in p._touched}
 
 
-def shape(p, s, curl, thumb=0.15, spread=0.0, mcp=0.0, cascade=0.07):
+def shape(p, s, curl, thumb=0.15, spread=0.0, mcp=0.0, cascade=0.07, fc=None):
     """Natural finger curl: index a bit straighter than the pinky, knuckle/middle/tip joints in real proportions.
     mcp < 0 bends the big knuckles backwards (the stretched, about-to-crack look)."""
     fan = {2: -1.0, 3: -0.3, 4: 0.4, 5: 1.0}
+    curls = fc if fc is not None else finger_curls(curl, cascade)
     for fi in (2, 3, 4, 5):
-        c = max(-0.2, min(1.3, curl + cascade * (fi - 3) * (1.0 - min(1.0, max(0.0, curl)))))
+        c = curls[fi - 2]
         for j, (k, extra) in enumerate(((84, 30 * mcp), (96, 0.0), (68, 0.0)), start=1):
             q = Quaternion((1, 0, 0), math.radians(k * c + extra))
             if j == 1 and spread:
@@ -406,8 +504,14 @@ def _fcurves(obj):
 
 
 def apply(p, hands):
-    """Pose the arms and fingers right now from a gesture dict (no keys) - used by mh.Person.pose()."""
+    """Pose the arms and fingers right now from a gesture dict (no keys) - used by mh.Person.pose().
+    Hands pinned to the head (rel=True) follow the head as it is posed now (call look() first)."""
+    Mh = p.pb["head"].matrix @ p._rest["head"].inverted()
+    Rh = Mh.to_quaternion()
     for s, h in hands.items():
-        hd, palm = q_dirs(h["q"])
-        p.arm(s, p.rig.matrix_world @ h["w"], elbow_hint=h["hint"], hand_dir=hd, palm=palm)
-        shape(p, s, h["curl"], h["thumb"], h["spread"], h["mcp"])
+        w, hint, q = h["w"], h["hint"], h["q"]
+        if h.get("relw", 0) > 0:
+            w, hint, q = Mh @ w, Rh @ hint, Rh @ q
+        hd, palm = q_dirs(q)
+        p.arm(s, p.rig.matrix_world @ w, elbow_hint=hint, hand_dir=hd, palm=palm)
+        shape(p, s, None, h["thumb"], h["spread"], h["mcp"], fc=h["fc"])
